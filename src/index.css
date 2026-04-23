@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=UnifrakturMaguntia&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #F4F1EA;
+  --color-ink: #1a1a1a;
+  --color-ink-light: #4b4b4b;
+
+  --font-serif: 'Lora', serif;
+  --font-headline: 'Playfair Display', serif;
+  --font-masthead: 'UnifrakturMaguntia', serif;
+  --font-mono: 'Courier New', Courier, monospace;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  margin: 0;
+  padding: 0;
+}
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
