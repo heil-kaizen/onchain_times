@@ -1,0 +1,6 @@
+{
+  "name": "The Onchain Times",
+  "description": "A minimal, retro terminal styled Solana paper trading simulator prototype fetching real-time prices from DexScreener.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
