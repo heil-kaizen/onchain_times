@@ -4,6 +4,9 @@ export interface NormalizedToken {
   token_symbol: string;
   token_logo: string | null;
   token_description: string | null;
+  priceUsd?: number;
+  marketCapUsd?: number;
+  bondingProgress?: number;
 }
 
 function shortenAddress(addr: string): string {
