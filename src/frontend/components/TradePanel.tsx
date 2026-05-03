@@ -73,17 +73,31 @@ export default function TradePanel({ current_price, current_mc, portfolio_state,
          <button 
            onClick={execute_buy_click}
            disabled={is_buy_disabled}
-           className="bg-[#1a1a1a] text-[#F4F1EA] border-2 border-[#1a1a1a] py-3 uppercase font-headline font-bold tracking-widest hover:bg-[#F4F1EA] hover:text-[#1a1a1a] disabled:opacity-30 disabled:hover:bg-[#1a1a1a] disabled:hover:text-[#F4F1EA] transition-colors shadow-[4px_4px_0_#1a1a1a] active:translate-y-1 active:translate-x-1 active:shadow-none"
+           className="bg-[#1a1a1a] text-[#F4F1EA] border-2 border-[#1a1a1a] py-3 uppercase font-headline font-bold tracking-widest hover:bg-[#065f46] hover:border-[#065f46] disabled:opacity-30 transition-colors shadow-[4px_4px_0_#1a1a1a] active:translate-y-1 active:translate-x-1 active:shadow-none"
          >
            Buy
          </button>
          <button 
            onClick={execute_sell_click}
            disabled={is_sell_disabled}
-           className="bg-transparent text-[#1a1a1a] border-2 border-[#1a1a1a] py-3 uppercase font-headline font-bold tracking-widest hover:bg-[#1a1a1a] hover:text-[#F4F1EA] disabled:opacity-30 transition-colors shadow-[4px_4px_0_#1a1a1a] active:translate-y-1 active:translate-x-1 active:shadow-none"
+           className="bg-[#1a1a1a] text-[#F4F1EA] border-2 border-[#1a1a1a] py-3 uppercase font-headline font-bold tracking-widest hover:bg-[#991b1b] hover:border-[#991b1b] disabled:opacity-30 transition-colors shadow-[4px_4px_0_#1a1a1a] active:translate-y-1 active:translate-x-1 active:shadow-none"
          >
            Sell
          </button>
+       </div>
+
+       <div className="flex justify-between items-center mt-2 px-1">
+          <div className="text-[10px] uppercase font-bold text-[#4a4a4a] opacity-60">Balance: {portfolio_state.token_holdings_quantity.toFixed(2)} tokens</div>
+          <button 
+            onClick={() => {
+              if (current_price && current_price > 0) {
+                set_trade_usd_amount((portfolio_state.token_holdings_quantity * current_price).toFixed(2));
+              }
+            }}
+            className="text-[10px] uppercase font-bold bg-[#1a1a1a] text-[#F4F1EA] px-2 py-0.5 rounded hover:bg-[#4a4a4a]"
+          >
+            Use Max
+          </button>
        </div>
 
        <div className="mt-4 p-3 border-2 border-[#1a1a1a] border-dotted text-xs space-y-2 bg-[#eeebe2] font-mono shadow-inner text-[#4a4a4a]">
