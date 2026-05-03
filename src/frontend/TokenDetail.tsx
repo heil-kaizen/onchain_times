@@ -193,7 +193,13 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
                   <LightweightChart 
                     poolAddress={poolAddress} 
                     trades={portfolio_state.trade_history} 
-                    onPriceUpdate={(price) => set_current_price(price)}
+                    onPriceUpdate={(price) => {
+                      set_current_price(price);
+                      // Sync MC with price update if supply is known
+                      if (marketData?.totalSupply) {
+                        set_current_mc(price * marketData.totalSupply);
+                      }
+                    }}
                     symbol={symbol}
                   />
                 </div>
@@ -211,6 +217,7 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
               current_price={current_price} 
               current_mc={current_mc}
               portfolio_state={portfolio_state} 
+              token_symbol={symbol}
               on_buy={execute_market_buy} 
               on_sell={execute_market_sell} 
             />
