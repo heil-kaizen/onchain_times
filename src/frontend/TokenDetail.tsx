@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetch_token_pair_info } from '../services/dexscreener_service';
+import { fetch_moralis_metadata, fetch_moralis_price, discover_pair_address } from '../services/moralis_service';
 import { VirtualPortfolioState, ExecutedTradeRecord } from '../models/types';
 import LightweightChart from './components/LightweightChart';
 import TradePanel from './components/TradePanel';
@@ -7,22 +7,17 @@ import HistoryList from './components/HistoryList';
 import { normalizeTokenMetadata } from '../utils/token_normalizer';
 import { resolveMissingMetadata } from '../utils/metadata_resolver';
 
-function formatFinancialNumber(num: number | undefined | null): string {
-  if (num == null || isNaN(num)) return 'N/A';
-  if (num >= 1_000_000_000) return '$' + (num / 1_000_000_000).toFixed(2) + 'B';
-  if (num >= 1_000_000) return '$' + (num / 1_000_000).toFixed(2) + 'M';
-  if (num >= 1_000) return '$' + (num / 1_000).toFixed(2) + 'K';
-  return '$' + num.toFixed(2);
-}
+import { formatFinancialNumber } from '../utils/formatters';
 
 export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: string, onBack: () => void }) {
   const [portfolio_state, set_portfolio_state] = useState<VirtualPortfolioState>({
-    solana_wallet_balance: 300,
+    solana_wallet_balance: 300, // Initial 300 USD
     token_holdings_quantity: 0,
     trade_history: []
   });
 
   const [current_price, set_current_price] = useState<number | null>(null);
+  const [current_mc, set_current_mc] = useState<number | null>(null);
   const [error_message, set_error_message] = useState<string | null>(null);
   const [symbol, setSymbol] = useState<string>("Unknown");
   const [tokenName, setTokenName] = useState<string>("Unknown");
@@ -33,42 +28,57 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
     let isMounted = true;
     const loadInfo = async () => {
       try {
-        const pairInfo = await fetch_token_pair_info(tokenAddress);
+        const [metaData, priceData] = await Promise.all([
+          fetch_moralis_metadata(tokenAddress),
+          fetch_moralis_price(tokenAddress)
+        ]);
         
-        if (pairInfo) {
-           let normalized = normalizeTokenMetadata(pairInfo, tokenAddress);
+        if (metaData && priceData) {
+           let normalized = normalizeTokenMetadata(metaData, tokenAddress);
+           // Fallback to BirdEye for extra metadata if needed
            normalized = await resolveMissingMetadata(normalized);
            
            if (!isMounted) return;
            
-           set_current_price(parseFloat(pairInfo.priceUsd));
+           const price = priceData.usdPrice || 0;
+           const mc = metaData.marketCapUsd || (price * (metaData.totalSupply || 0));
+           
+           set_current_price(price);
+           set_current_mc(mc);
            setSymbol(normalized.token_symbol);
            setTokenName(normalized.token_name);
            
-           // Map DexScreener payload to our UI market data format
            setMarketData({
-             mc: pairInfo.marketCap || pairInfo.fdv,
-             v24hUSD: pairInfo.volume?.h24,
-             liquidity: pairInfo.liquidity?.usd
+             mc: mc,
+             liquidity: metaData.liquidityUsd,
+             totalSupply: metaData.totalSupply,
+             verified: metaData.verified
            });
            
-           if (pairInfo.pairAddress) {
-             setPoolAddress(pairInfo.pairAddress);
-           }
+           // Discover pair for chart fallback
+           const pair = await discover_pair_address(tokenAddress);
+           if (isMounted) setPoolAddress(pair);
         } else {
-           throw new Error('No trading data or market stats available');
+           throw new Error('Incomplete market data from API');
         }
       } catch (err: any) {
         if (!isMounted) return;
-        set_error_message(err.message || 'No trading data available');
+        console.error("Token load failed", err);
+        set_error_message(err.message || 'Market data unreachable');
       }
     };
     loadInfo();
-    return () => { isMounted = false; };
+    
+    // Polling price and stats
+    const interval = setInterval(loadInfo, 15000);
+    return () => { 
+      isMounted = false; 
+      clearInterval(interval);
+    };
   }, [tokenAddress]);
 
   const execute_market_buy = (spend_amount: number) => {
-    if (!current_price || current_price <= 0) return;
+    if (!current_price || current_price <= 0 || !current_mc) return;
     if (spend_amount > portfolio_state.solana_wallet_balance || spend_amount <= 0) return;
 
     const bought_token_quantity = spend_amount / current_price;
@@ -76,9 +86,11 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
       trade_id: crypto.randomUUID(),
       trade_type: 'BUY',
       token_symbol: symbol,
-      execution_price_in_sol: current_price,
+      token_address: tokenAddress,
+      execution_price_usd: current_price,
+      market_cap_at_trade: current_mc,
       trade_quantity: bought_token_quantity,
-      total_sol_value: spend_amount,
+      total_usd_value: spend_amount,
       execution_timestamp: Date.now()
     };
 
@@ -91,7 +103,7 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
   };
 
   const execute_market_sell = (sell_token_quantity: number) => {
-    if (!current_price || current_price <= 0) return;
+    if (!current_price || current_price <= 0 || !current_mc) return;
     if (sell_token_quantity > portfolio_state.token_holdings_quantity || sell_token_quantity <= 0) return;
 
     const gained_amount = sell_token_quantity * current_price;
@@ -99,9 +111,11 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
       trade_id: crypto.randomUUID(),
       trade_type: 'SELL',
       token_symbol: symbol,
-      execution_price_in_sol: current_price,
+      token_address: tokenAddress,
+      execution_price_usd: current_price,
+      market_cap_at_trade: current_mc,
       trade_quantity: sell_token_quantity,
-      total_sol_value: gained_amount,
+      total_usd_value: gained_amount,
       execution_timestamp: Date.now()
     };
 
@@ -142,14 +156,15 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
             <div className="flex justify-between items-end border-b-2 border-[#1a1a1a] pb-2 mb-4">
               <h3 className="font-headline text-xl font-bold uppercase">Live Quotations</h3>
               <span className="font-mono text-sm font-bold bg-[#eeebe2] px-2 border border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a]">
-                Current: {current_price ? `$${current_price.toFixed(6)}` : 'Evaluating...'}
+                Current: {current_price ? `$${current_price.toFixed(8)}` : 'Evaluating...'}
               </span>
             </div>
             
             {marketData && (
               <div className="flex flex-wrap gap-4 mb-4 font-mono text-xs border border-[#1a1a1a] p-2 bg-[#F4F1EA]">
-                <div><span className="opacity-70">MC:</span> {formatFinancialNumber(marketData.mc)}</div>
-                <div><span className="opacity-70">LIQ:</span> {formatFinancialNumber(marketData.liquidity)}</div>
+                <div><span className="opacity-70 uppercase tracking-tighter">MC:</span> {formatFinancialNumber(marketData.mc)}</div>
+                <div><span className="opacity-70 uppercase tracking-tighter">Supply:</span> {formatFinancialNumber(marketData.totalSupply)}</div>
+                {marketData.verified && <div className="text-emerald-700 font-bold uppercase tracking-tighter">✓ Verified</div>}
               </div>
             )}
 
@@ -175,6 +190,7 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
             <h3 className="font-headline text-xl font-bold border-b-2 border-[#1a1a1a] pb-2 mb-4 uppercase text-center tracking-widest">Execute Order</h3>
             <TradePanel 
               current_price={current_price} 
+              current_mc={current_mc}
               portfolio_state={portfolio_state} 
               on_buy={execute_market_buy} 
               on_sell={execute_market_sell} 
@@ -184,9 +200,8 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
 
         <section className="mb-12">
           <h2 className="font-headline text-2xl font-black mb-4 border-b-[3px] border-[#1a1a1a] uppercase tracking-widest">Transaction Ledger</h2>
-          <div className="border-[3px] border-[#1a1a1a] bg-white p-4 max-h-[300px] overflow-auto shadow-[6px_6px_0_#1a1a1a]">
-            {/* Note: Trade history uses "SOL" labeling inside HistoryList because we use the old model structure, but the data is populated in USD. */}
-            <HistoryList trade_history={portfolio_state.trade_history} />
+          <div className="border-[3px] border-[#1a1a1a] bg-white p-4 max-h-[400px] overflow-auto shadow-[6px_6px_0_#1a1a1a]">
+            <HistoryList trade_history={portfolio_state.trade_history} current_mc={current_mc} />
           </div>
         </section>
 
