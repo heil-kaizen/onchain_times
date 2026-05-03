@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, createSeriesMarkers, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { ExecutedTradeRecord } from '../../models/types';
-import { fetch_birdeye_ohlcv } from '../../services/birdeye_service';
+import { fetch_moralis_ohlcv } from '../../services/moralis_service';
 
 interface LightweightChartProps {
   poolAddress: string;
@@ -15,10 +15,9 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  const [timeframe, setTimeframe] = React.useState<'1s'|'15s'|'30s'|'1m'|'5m'|'15m'|'1h'>('1m');
+  const [timeframe, setTimeframe] = React.useState<'1min'|'5min'|'15min'|'1h'|'4h'|'1d'>('1min');
 
   function build_trade_markers(trade_history: ExecutedTradeRecord[]) {
-    // Sort trades by timestamp ascending
     const sorted = [...trade_history].sort((a, b) => a.execution_timestamp - b.execution_timestamp);
     return sorted.map((trade) => ({
       time: Math.floor(trade.execution_timestamp / 1000) as Time,
@@ -29,7 +28,6 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
     }));
   }
 
-  // 1. Initialize Chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -73,7 +71,6 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
     };
 
     window.addEventListener('resize', handleResize);
-    // Trigger initial resize to fit container
     setTimeout(handleResize, 0);
 
     return () => {
@@ -85,7 +82,6 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
     };
   }, []);
 
-  // 2. Fetch and Update Data
   useEffect(() => {
     if (!poolAddress || !seriesRef.current) return;
 
@@ -94,25 +90,33 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
 
     const loadData = async () => {
       try {
-        const data = await fetch_birdeye_ohlcv(poolAddress, timeframe);
+        const response = await fetch_moralis_ohlcv(poolAddress, timeframe);
         if (!isMounted) return;
-        if (data && data.length > 0 && seriesRef.current) {
-          seriesRef.current.setData(data as CandlestickData[]);
+        
+        // Moralis structure transformation
+        if (response && response.result && Array.isArray(response.result) && seriesRef.current) {
+          const transformed = response.result.map((item: any) => ({
+            time: Math.floor(new Date(item.timestamp).getTime() / 1000) as Time,
+            open: parseFloat(item.open),
+            high: parseFloat(item.high),
+            low: parseFloat(item.low),
+            close: parseFloat(item.close)
+          })).sort((a: any, b: any) => a.time - b.time);
           
-          // Inform parent of latest price
-          if (onPriceUpdate) {
-            onPriceUpdate(data[data.length - 1].close);
+          seriesRef.current.setData(transformed as CandlestickData[]);
+          
+          if (onPriceUpdate && transformed.length > 0) {
+            onPriceUpdate(transformed[transformed.length - 1].close);
           }
         }
       } catch (err) {
         if (!isMounted) return;
-        console.error("Failed to load chart data", err);
+        console.error("Failed to load Moralis chart data", err);
       }
     };
 
     loadData();
-    // Increase polling interval to 60 seconds to comply with public API rate limits (GeckoTerminal limits 30 req/min)
-    intervalId = setInterval(loadData, 60000);
+    intervalId = setInterval(loadData, 30000);
 
     return () => {
       isMounted = false;
@@ -120,7 +124,6 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
     };
   }, [poolAddress, onPriceUpdate, timeframe]);
 
-  // 3. Update Markers when trades change
   useEffect(() => {
     if (markersRef.current) {
       const markers = build_trade_markers(trades);
@@ -133,13 +136,13 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
       <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
         {symbol && <span className="font-headline font-bold text-lg bg-[#F4F1EA] px-2 py-0.5 border border-[#1a1a1a] opacity-80 shadow-[2px_2px_0_#1a1a1a]">{symbol}/USD</span>}
         <div className="flex bg-[#F4F1EA] border border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a]">
-          {(['1s', '15s', '30s', '1m', '5m', '15m', '1h'] as const).map(tf => (
+          {(['1min', '5min', '15min', '1h', '4h', '1d'] as const).map(tf => (
              <button 
                key={tf}
                onClick={() => setTimeframe(tf as any)}
                className={`px-2 py-1 text-xs font-mono font-bold uppercase transition-colors border-r border-[#1a1a1a] last:border-r-0 ${timeframe === tf ? 'bg-[#1a1a1a] text-[#F4F1EA]' : 'hover:bg-[#eeebe2]'}`}
              >
-               {tf}
+               {tf.replace('min', 'm')}
              </button>
           ))}
         </div>
@@ -148,3 +151,4 @@ export default function LightweightChart({ poolAddress, trades, onPriceUpdate, s
     </div>
   );
 }
+
