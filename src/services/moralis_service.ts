@@ -107,10 +107,25 @@ export async function fetch_moralis_price(address: string) {
 }
 
 export async function fetch_moralis_ohlcv(pairAddress: string, timeframe: string = '1min') {
+  const toDate = Math.floor(Date.now() / 1000);
+  
+  // Dynamic window to cover at least the limit (200 bars)
+  let windowSeconds = 24 * 60 * 60; // default 24h
+  if (timeframe === '5min') windowSeconds = 5 * 60 * 200;
+  if (timeframe === '15min') windowSeconds = 15 * 60 * 200;
+  if (timeframe === '1h') windowSeconds = 1 * 60 * 60 * 200;
+  if (timeframe === '4h') windowSeconds = 4 * 60 * 60 * 200;
+  if (timeframe === '1d') windowSeconds = 1 * 24 * 60 * 60 * 200;
+  
+  // Add a small buffer (20%)
+  const fromDate = toDate - Math.floor(windowSeconds * 1.2);
+
   return await fetchMoralis(`/token/mainnet/pairs/${pairAddress}/ohlcv`, {
     timeframe,
     currency: 'usd',
-    limit: '200'
+    limit: '200',
+    fromDate: fromDate.toString(),
+    toDate: toDate.toString()
   });
 }
 
