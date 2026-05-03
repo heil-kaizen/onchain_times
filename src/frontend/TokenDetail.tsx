@@ -28,38 +28,57 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
     let isMounted = true;
     const loadInfo = async () => {
       try {
-        const [metaData, priceData] = await Promise.all([
+        const results = await Promise.allSettled([
           fetch_moralis_metadata(tokenAddress),
           fetch_moralis_price(tokenAddress)
         ]);
         
-        if (metaData && priceData) {
+        const metaData = results[0].status === 'fulfilled' ? results[0].value : null;
+        let priceData = results[1].status === 'fulfilled' ? results[1].value : null;
+        
+        // Fallback for price if Moralis fails
+        if (!priceData) {
+           try {
+             const { fetch_token_pair_info } = await import('../services/dexscreener_service');
+             const dsData = await fetch_token_pair_info(tokenAddress);
+             if (dsData) {
+               priceData = { usdPrice: parseFloat(dsData.priceUsd || "0") };
+             }
+           } catch (dsErr) {
+             console.warn("DexScreener price fallback failed", dsErr);
+           }
+        }
+
+        if (metaData) {
            let normalized = normalizeTokenMetadata(metaData, tokenAddress);
            // Fallback to BirdEye for extra metadata if needed
            normalized = await resolveMissingMetadata(normalized);
            
            if (!isMounted) return;
            
-           const price = priceData.usdPrice || 0;
-           const mc = metaData.marketCapUsd || (price * (metaData.totalSupply || 0));
+           const price = priceData?.usdPrice || 0;
+           const rawMC = metaData.marketCap || metaData.fullyDilutedValue || metaData.marketCapUsd;
+           const rawSupply = metaData.totalSupply || metaData.totalSupplyFormatted;
+           
+           const mc = rawMC ? parseFloat(String(rawMC)) : (price * parseFloat(String(rawSupply || 0)));
            
            set_current_price(price);
            set_current_mc(mc);
-           setSymbol(normalized.token_symbol);
-           setTokenName(normalized.token_name);
+           setSymbol(normalized.token_symbol || "UNKNOWN");
+           setTokenName(normalized.token_name || "Unknown Asset");
            
            setMarketData({
              mc: mc,
-             liquidity: metaData.liquidityUsd,
-             totalSupply: metaData.totalSupply,
-             verified: metaData.verified
+             liquidity: parseFloat(String(metaData.liquidity || metaData.liquidityUsd || 0)),
+             totalSupply: parseFloat(String(rawSupply || 0)),
+             verified: metaData.isVerifiedContract || metaData.verified || false
            });
            
            // Discover pair for chart fallback
            const pair = await discover_pair_address(tokenAddress);
            if (isMounted) setPoolAddress(pair);
         } else {
-           throw new Error('Incomplete market data from API');
+           throw new Error('Could not retrieve token identity from API');
         }
       } catch (err: any) {
         if (!isMounted) return;
