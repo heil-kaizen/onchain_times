@@ -5,13 +5,13 @@ const API_KEY = (import.meta as any).env?.VITE_MORALIS_API_KEY || '';
 
 // Simple cache
 const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 30000; // 30 seconds
+const CACHE_TTL = 5000; // 5 seconds for more responsive updates
 
-async function fetchMoralis(path: string, params: Record<string, string> = {}) {
+async function fetchMoralis(path: string, params: Record<string, string> = {}, ignoreCache: boolean = false) {
   const query = new URLSearchParams(params).toString();
   const url = `${BASE_URL}${path}${query ? `?${query}` : ''}`;
   
-  if (cache.has(url)) {
+  if (!ignoreCache && cache.has(url)) {
     const entry = cache.get(url)!;
     if (Date.now() - entry.timestamp < CACHE_TTL) {
       return entry.data;
@@ -51,8 +51,8 @@ export interface MoralisToken {
   bondingCurveProgress?: number;
 }
 
-export async function fetch_moralis_new_tokens(): Promise<NormalizedToken[]> {
-  const data = await fetchMoralis('/token/mainnet/exchange/pumpfun/new', { limit: '50' });
+export async function fetch_moralis_new_tokens(ignoreCache: boolean = false): Promise<NormalizedToken[]> {
+  const data = await fetchMoralis('/token/mainnet/exchange/pumpfun/new', { limit: '50' }, ignoreCache);
   if (!data || !data.result) return [];
   
   return (data.result as any[]).map(t => ({
@@ -67,8 +67,8 @@ export async function fetch_moralis_new_tokens(): Promise<NormalizedToken[]> {
   }));
 }
 
-export async function fetch_moralis_bonding_tokens(): Promise<NormalizedToken[]> {
-  const data = await fetchMoralis('/token/mainnet/exchange/pumpfun/bonding', { limit: '50' });
+export async function fetch_moralis_bonding_tokens(ignoreCache: boolean = false): Promise<NormalizedToken[]> {
+  const data = await fetchMoralis('/token/mainnet/exchange/pumpfun/bonding', { limit: '50' }, ignoreCache);
   if (!data || !data.result) return [];
   
   return (data.result as any[]).map(t => ({
@@ -77,14 +77,14 @@ export async function fetch_moralis_bonding_tokens(): Promise<NormalizedToken[]>
     token_symbol: t.symbol,
     token_logo: t.logo || null,
     token_description: null,
-    bondingProgress: t.bondingCurveProgress,
+    bondingProgress: t.bondingCurveProgress || t.bonding_curve_progress || 0,
     priceUsd: t.priceUsd ? parseFloat(t.priceUsd) : 0,
     marketCapUsd: t.fullyDilutedValuation ? parseFloat(t.fullyDilutedValuation) : 0
   }));
 }
 
-export async function fetch_moralis_graduated_tokens(): Promise<NormalizedToken[]> {
-  const data = await fetchMoralis('/token/mainnet/exchange/pumpfun/graduated', { limit: '50' });
+export async function fetch_moralis_graduated_tokens(ignoreCache: boolean = false): Promise<NormalizedToken[]> {
+  const data = await fetchMoralis('/token/mainnet/exchange/pumpfun/graduated', { limit: '50' }, ignoreCache);
   if (!data || !data.result) return [];
   
   return (data.result as any[]).map(t => ({
