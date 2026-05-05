@@ -15,14 +15,14 @@ export default function AppDashboard({ onBack, onTokenSelect }: { onBack?: () =>
   const [error_message, set_error_message] = useState<string | null>(null);
   const [is_loading, set_is_loading] = useState<boolean>(false);
 
-  const loadTokens = async () => {
+  const loadTokens = async (ignoreCache: boolean = false) => {
     set_is_loading(true);
     set_error_message(null);
     try {
       const results = await Promise.allSettled([
-        fetch_moralis_new_tokens(),
-        fetch_moralis_bonding_tokens(),
-        fetch_moralis_graduated_tokens()
+        fetch_moralis_new_tokens(ignoreCache),
+        fetch_moralis_bonding_tokens(ignoreCache),
+        fetch_moralis_graduated_tokens(ignoreCache)
       ]);
       
       const newT = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -68,7 +68,7 @@ export default function AppDashboard({ onBack, onTokenSelect }: { onBack?: () =>
              <div className="flex items-center gap-4">
                {error_message && <span className="text-red-800 text-xs font-bold uppercase italic animate-pulse">!! {error_message}</span>}
                <button 
-                  onClick={loadTokens}
+                  onClick={() => loadTokens(true)}
                   disabled={is_loading}
                   className="text-xs uppercase font-bold bg-[#1a1a1a] text-[#F4F1EA] px-3 py-1.5 tracking-widest hover:bg-transparent hover:text-[#1a1a1a] border border-[#1a1a1a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-1"
                 >
@@ -165,7 +165,6 @@ export default function AppDashboard({ onBack, onTokenSelect }: { onBack?: () =>
             
             {/* Graduated */}
             <div className="border-4 border-[#1a1a1a] p-4 bg-[#eeebe2] relative shadow-[3px_3px_0_#1a1a1a] flex flex-col h-[600px]">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#eeebe2] px-2 font-headline text-xs font-bold uppercase tracking-widest border border-[#1a1a1a]">Active Market</div>
               <h3 className="relative font-headline font-bold text-xl mb-3 border-b border-[#1a1a1a] pb-2 text-center uppercase tracking-wider">
                 Graduated
               </h3>
