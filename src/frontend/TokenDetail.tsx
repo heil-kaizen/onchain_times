@@ -62,17 +62,18 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
            
            const mc = rawMC ? parseFloat(String(rawMC)) : (price * parseFloat(String(rawSupply || 0)));
            
-           set_current_price(price);
-           set_current_mc(mc);
-           setSymbol(normalized.token_symbol || "UNKNOWN");
-           setTokenName(normalized.token_name || "Unknown Asset");
-           
-           setMarketData({
-             mc: mc,
-             liquidity: parseFloat(String(metaData.liquidity || metaData.liquidityUsd || 0)),
-             totalSupply: parseFloat(String(rawSupply || 0)),
-             verified: metaData.isVerifiedContract || metaData.verified || false
-           });
+            set_current_price(price);
+            set_current_mc(mc);
+            setSymbol(normalized.token_symbol || "UNKNOWN");
+            setTokenName(normalized.token_name || "Unknown Asset");
+            
+            const supply = parseFloat(String(rawSupply || 0));
+            setMarketData({
+              mc: mc,
+              liquidity: parseFloat(String(metaData.liquidity || metaData.liquidityUsd || 0)),
+              totalSupply: supply,
+              verified: metaData.isVerifiedContract || metaData.verified || false
+            });
            
            // Discover pair for chart fallback
            const pair = await discover_pair_address(tokenAddress);
@@ -181,7 +182,7 @@ export default function TokenDetail({ tokenAddress, onBack }: { tokenAddress: st
             
             {marketData && (
               <div className="flex flex-wrap gap-4 mb-4 font-mono text-xs border border-[#1a1a1a] p-2 bg-[#F4F1EA]">
-                <div><span className="opacity-70 uppercase tracking-tighter">MC:</span> {formatFinancialNumber(marketData.mc)}</div>
+                <div><span className="opacity-70 uppercase tracking-tighter">MC:</span> {formatFinancialNumber(current_mc || marketData.mc)}</div>
                 <div><span className="opacity-70 uppercase tracking-tighter">Supply:</span> {formatFinancialNumber(marketData.totalSupply)}</div>
                 {marketData.verified && <div className="text-emerald-700 font-bold uppercase tracking-tighter">✓ Verified</div>}
               </div>
